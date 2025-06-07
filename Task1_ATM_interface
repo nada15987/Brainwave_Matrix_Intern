@@ -1,1 +1,389 @@
+#include <iostream>
+#include <vector>
+#include <string>
+#include <thread>
+#include <chrono>
+#include <limits>
+#include <cctype>
+#include <algorithm>
+
+using namespace std;
+
+// Track global login attempts
+int globalLoginAttempts = 0;
+
+// Template function for validated numeric input
+template <typename T>
+T getValidatedInput(const string &prompt = "") {
+    T value;
+    while (true) {
+        if (!prompt.empty()) cout << prompt;
+        cin >> value;
+
+        if (cin.fail()) {
+            cin.clear();
+            cin.ignore(numeric_limits<streamsize>::max(), '\n');
+            cout << "Invalid input! Please enter numbers only.\n";
+        } else {
+            cin.ignore(numeric_limits<streamsize>::max(), '\n');
+            return value;
+        }
+    }
+}
+
+// Check if string contains only digits
+bool isDigitsOnly(const string &str) {
+    return !str.empty() && all_of(str.begin(), str.end(), ::isdigit);
+}
+
+// Check if string contains only letters and spaces
+bool isLettersOnly(const string &str) {
+    return !str.empty() && all_of(str.begin(), str.end(), [](char c) {
+        return isalpha(c) || isspace(c);
+    });
+}
+
+// Check if string contains only letters and **no spaces**
+bool isLettersNoSpacesOnly(const string &str) {
+    return !str.empty() && all_of(str.begin(), str.end(), [](char c) {
+        return isalpha(c); // no spaces allowed
+    });
+}
+
+// ATM class representing a single account
+class ATM {
+private:
+    string ownerName;
+    string userPIN;
+    double balance;
+
+public:
+    // Constructor
+    ATM(string name, string pin, double initialBalance)
+        : ownerName(name), userPIN(pin), balance(initialBalance) {}
+
+    // Get account PIN
+    string getPIN() const {
+        return userPIN;
+    }
+
+    // Get account owner name
+    string getName() const {
+        return ownerName;
+    }
+
+    // Login method with max 3 attempts
+    bool login() {
+        string enteredPIN;
+        while (globalLoginAttempts < 3) {
+            cout << "Enter your PIN: ";
+            cin >> enteredPIN;
+            globalLoginAttempts++;
+
+            if (enteredPIN == userPIN) {
+                cout << "Login successful.\n";
+                return true;
+            } else {
+                cout << "Incorrect PIN. Attempts remaining: " << (3 - globalLoginAttempts) << "\n";
+            }
+        }
+
+        cout << "Too many failed attempts. System locked for 10 seconds.\n";
+        this_thread::sleep_for(chrono::seconds(10));
+        globalLoginAttempts = 0;
+        return false;
+    }
+
+    // Show the main menu for account actions
+    void showMenu(vector<ATM> &allAccounts) {
+        int choice;
+        do {
+            cout << "\n==== ATM Menu (" << ownerName << ") ====\n";
+            cout << "1. Check Balance\n";
+            cout << "2. Deposit\n";
+            cout << "3. Withdraw\n";
+            cout << "4. Change PIN\n";
+            cout << "5. Transfer Money\n";
+            cout << "6. Print Account Info\n";
+            cout << "7. Exit\n";
+            choice = getValidatedInput<int>("Choose an option: ");
+
+            switch (choice) {
+                case 1: checkBalance(); break;
+                case 2: deposit(); break;
+                case 3: withdraw(); break;
+                case 4: changePIN(allAccounts); break;
+                case 5: transfer(allAccounts); break;
+                case 6: printAccountData(); break;
+                case 7: cout << "Logging out. Goodbye!\n"; break;
+                default: cout << "Invalid option. Please try again.\n";
+            }
+        } while (choice != 7);
+    }
+
+    // Show current balance
+    void checkBalance() {
+        cout << "Current balance: $" << balance << "\n";
+    }
+
+    // Deposit money
+    void deposit() {
+        double amount = getValidatedInput<double>("Enter amount to deposit: $");
+        if (amount > 0) {
+            balance += amount;
+            cout << "Deposit successful. New balance: $" << balance << "\n";
+        } else {
+            cout << "Invalid amount.\n";
+        }
+    }
+
+    // Withdraw money
+    void withdraw() {
+        double amount = getValidatedInput<double>("Enter amount to withdraw: $");
+        if (amount <= 0) {
+            cout << "Invalid amount.\n";
+        } else if (amount > balance) {
+            cout << "Insufficient funds.\n";
+        } else {
+            balance -= amount;
+            cout << "Withdrawal successful. New balance: $" << balance << "\n";
+        }
+    }
+
+    // Change PIN after verifying current PIN
+    void changePIN(vector<ATM> &accounts) {
+        string oldPIN, newPIN;
+
+        cout << "Enter current PIN: ";
+        cin >> oldPIN;
+
+        if (oldPIN != userPIN) {
+            cout << "Incorrect current PIN.\n";
+            return;
+        }
+
+        while (true) {
+            cout << "Enter new 4-digit PIN (numbers only): ";
+            cin >> newPIN;
+
+            if (!isDigitsOnly(newPIN) || newPIN.length() != 4) {
+                cout << "PIN must be exactly 4 digits.\n";
+                continue;
+            }
+
+            // Check if PIN is already used by another account
+            bool isDuplicate = false;
+            for (const auto &acc : accounts) {
+                if (acc.getPIN() == newPIN && &acc != this) {
+                    isDuplicate = true;
+                    break;
+                }
+            }
+
+            if (isDuplicate) {
+                cout << "This PIN is already in use by another account. Try again.\n";
+            } else {
+                userPIN = newPIN;
+                cout << "PIN changed successfully.\n";
+                break;
+            }
+        }
+    }
+
+    // Transfer money to another account by PIN
+    void transfer(vector<ATM> &accounts) {
+        string receiverPIN;
+        int attempts = 0;
+        ATM* receiver = nullptr;
+
+        while (attempts < 3) {
+            cout << "Enter recipient's PIN: ";
+            cin >> receiverPIN;
+
+            for (auto &acc : accounts) {
+                if (acc.getPIN() == receiverPIN && &acc != this) {
+                    receiver = &acc;
+                    break;
+                }
+            }
+
+            if (receiver != nullptr)
+                break;
+
+            cout << "Recipient not found. Attempts remaining: " << (2 - attempts) << "\n";
+            attempts++;
+        }
+
+        if (!receiver) {
+            cout << "Transfer canceled after 3 failed attempts.\n";
+            return;
+        }
+
+        double amount = getValidatedInput<double>("Enter amount to transfer: $");
+
+        if (amount <= 0) {
+            cout << "Invalid amount.\n";
+            return;
+        }
+
+        if (amount > balance) {
+            cout << "Insufficient funds.\n";
+            return;
+        }
+
+        balance -= amount;
+        receiver->balance += amount;
+
+        cout << "Transfer successful to " << receiver->getName() << ". New balance: $" << balance << "\n";
+    }
+
+    // Print account details
+    void printAccountData() {
+        cout << "\n=== Account Info ===\n";
+        cout << "Owner Name: " << ownerName << "\n";
+        cout << "Account PIN: " << userPIN << "\n";
+        cout << "Current Balance: $" << balance << "\n";
+    }
+
+    // Grant access to private members for account creation
+    friend void create_new_acc(vector<ATM> &accounts);
+};
+
+// Create a new account
+void create_new_acc(vector<ATM> &accounts) {
+    string name, newPIN;
+    double initialBalance;
+
+    cout << "\n=== Create New Account ===\n";
+
+    // Get name (letters only, NO spaces)
+    while (true) {
+        cout << "Enter your name (letters only, no spaces): ";
+        getline(cin >> ws, name);  // Immediate prompt
+
+        if (!isLettersNoSpacesOnly(name)) {
+            cout << "Invalid name. Please enter letters only with no spaces.\n";
+            continue;
+        }
+
+        // Check if name already exists
+        bool nameExists = false;
+        for (const auto &acc : accounts) {
+            if (acc.getName() == name) {
+                nameExists = true;
+                break;
+            }
+        }
+
+        if (nameExists) {
+            cout << "This name is already used by another account. Please enter a different name.\n";
+            continue;
+        }
+
+        // If passed all checks, break
+        break;
+    }
+
+    // Get a valid 4-digit PIN
+    while (true) {
+        cout << "Enter a new 4-digit PIN (numbers only): ";
+        cin >> newPIN;
+
+        if (!isDigitsOnly(newPIN) || newPIN.length() != 4) {
+            cout << "PIN must be exactly 4 digits.\n";
+            continue;
+        }
+
+        // Check for duplicate PIN
+        bool exists = false;
+        for (const auto &acc : accounts) {
+            if (acc.getPIN() == newPIN) {
+                exists = true;
+                break;
+            }
+        }
+
+        if (exists) {
+            cout << "Account with this PIN already exists.\n";
+        } else {
+            break;
+        }
+    }
+
+    // Get initial deposit
+    initialBalance = getValidatedInput<double>("Enter initial deposit: $");
+
+    if (initialBalance < 0) {
+        cout << "Invalid balance.\n";
+        return;
+    }
+
+    // Add new account
+    accounts.push_back(ATM(name, newPIN, initialBalance));
+    cout << "Account created successfully.\n";
+    accounts.back().printAccountData();
+}
+
+// Main menu
+int main() {
+    // Predefined accounts
+    vector<ATM> accounts = {
+        ATM("Nada", "1234", 1000.0),
+        ATM("Bob", "5678", 500.0),
+        ATM("Ahmed", "1111", 750.0),
+        ATM("Diana", "2222", 1200.0),
+        ATM("Mohamed", "3333", 300.0),
+        ATM("Julia", "4444", 950.0),
+    };
+
+    int mainChoice;
+
+    do {
+        cout << "\n==== Welcome to ATM System ====\n";
+        cout << "1. Login to existing account\n";
+        cout << "2. Create new account\n";
+        cout << "3. Exit\n";
+        mainChoice = getValidatedInput<int>("Choose an option: ");
+
+        switch (mainChoice) {
+            case 1: {
+                string pin;
+                cout << "Enter PIN to login: ";
+                cin >> pin;
+                bool found = false;
+
+                for (auto &acc : accounts) {
+                    if (acc.getPIN() == pin) {
+                        if (acc.login()) {
+                            acc.showMenu(accounts);
+                        }
+                        found = true;
+                        break;
+                    }
+                }
+
+                if (!found) {
+                    cout << "Account not found.\n";
+                    globalLoginAttempts++;
+                    if (globalLoginAttempts >= 3) {
+                        cout << "Too many failed attempts. System locked for 10 seconds.\n";
+                        this_thread::sleep_for(chrono::seconds(10));
+                        globalLoginAttempts = 0;
+                    }
+                }
+                break;
+            }
+            case 2:
+                create_new_acc(accounts);
+                break;
+            case 3:
+                cout << "Exiting system. Goodbye!\n";
+                break;
+            default:
+                cout << "Invalid choice.\n";
+        }
+    } while (mainChoice != 3);
+
+    return 0;
+}
 

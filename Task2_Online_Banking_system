@@ -1,0 +1,266 @@
+#include <iostream>
+#include <vector>
+#include <string>
+#include <limits>
+#include <iomanip>
+#include <cctype>
+
+using namespace std;
+
+// Global variable to generate unique account numbers
+int nextAccountNumber = 1001;
+
+// ======================
+// BankAccount Class
+// ======================
+class BankAccount {
+private:
+    int accountNumber;
+    string ownerName;
+    double balance;
+
+public:
+    // Constructor
+    BankAccount(string name, double initialBalance) {
+        accountNumber = nextAccountNumber++;
+        ownerName = name;
+        balance = initialBalance;
+    }
+
+    // Getters
+    int getAccountNumber() const { return accountNumber; }
+    string getOwnerName() const { return ownerName; }
+    double getBalance() const { return balance; }
+
+    // Deposit
+    void deposit(double amount) {
+        if (amount <= 0) {
+            cout << "Invalid deposit amount.\n";
+            return;
+        }
+        balance += amount;
+        cout << "Deposit successful. New balance: $" << fixed << setprecision(2) << balance << "\n";
+    }
+
+    // Withdraw
+    void withdraw(double amount) {
+        if (amount <= 0) {
+            cout << "Invalid withdrawal amount.\n";
+            return;
+        }
+        if (amount > balance) {
+            cout << "Insufficient balance.\n";
+            return;
+        }
+        balance -= amount;
+        cout << "Withdrawal successful. Remaining balance: $" << fixed << setprecision(2) << balance << "\n";
+    }
+
+    // Transfer
+    void transfer(BankAccount& receiver, double amount) {
+        if (amount <= 0 || amount > balance) {
+            cout << "Invalid transfer amount.\n";
+            return;
+        }
+        balance -= amount;
+        receiver.balance += amount;
+
+        cout << "Transfer successful. $" << fixed << setprecision(2) << amount
+             << " transferred to " << receiver.getOwnerName()
+             << " (Acc#: " << receiver.getAccountNumber() << ").\n";
+        cout << "Updated Balances:\n";
+        cout << "- Sender (" << ownerName << "): $" << fixed << setprecision(2) << balance << "\n";
+        cout << "- Receiver (" << receiver.getOwnerName() << "): $" << fixed << setprecision(2) << receiver.getBalance() << "\n";
+    }
+
+    // Display account
+    void display() const {
+        cout << "-----------------------------\n";
+        cout << "Account Number: " << accountNumber << "\n";
+        cout << "Owner Name    : " << ownerName << "\n";
+        cout << "Balance       : $" << fixed << setprecision(2) << balance << "\n";
+        cout << "-----------------------------\n";
+    }
+};
+
+// ======================
+// Utility Functions
+// ======================
+
+BankAccount* findAccount(vector<BankAccount>& accounts, int accNumber) {
+    for (auto& acc : accounts) {
+        if (acc.getAccountNumber() == accNumber)
+            return &acc;
+    }
+    return nullptr;
+}
+
+bool isNameTaken(const vector<BankAccount>& accounts, const string& name) {
+    for (const auto& acc : accounts) {
+        if (acc.getOwnerName() == name) {
+            return true;
+        }
+    }
+    return false;
+}
+
+double getValidAmount(const string& prompt, bool allowZero = true) {
+    double amount;
+    while (true) {
+        cout << prompt;
+        cin >> amount;
+        if (!cin.fail() && ((allowZero && amount >= 0) || (!allowZero && amount > 0)))
+            return amount;
+
+        cout << "Invalid input. Try again.\n";
+        cin.clear();
+        cin.ignore(numeric_limits<streamsize>::max(), '\n');
+    }
+}
+
+bool isValidName(const string& str) {
+    if (str.empty()) return false;
+    for (char c : str) {
+        if (!isalpha(c)) return false;
+    }
+    return true;
+}
+
+void showMenu() {
+    cout << "\n====== Online Banking System ======\n";
+    cout << "1. Create Account\n";
+    cout << "2. Deposit Funds\n";
+    cout << "3. Withdraw Funds\n";
+    cout << "4. Transfer Funds\n";
+    cout << "5. Display Account\n";
+    cout << "6. Exit\n";
+    cout << "===================================\n";
+    cout << "Enter your choice: ";
+}
+
+// ======================
+// Main Program
+// ======================
+int main() {
+    vector<BankAccount> accounts;
+    int choice;
+
+    do {
+        showMenu();
+
+        while (true) {
+            cin >> choice;
+            if (!cin.fail() && choice >= 1 && choice <= 6)
+                break;
+
+            cin.clear();
+            cin.ignore(numeric_limits<streamsize>::max(), '\n');
+            cout << "Invalid input. Please enter a number between 1 and 6: ";
+        }
+
+        switch (choice) {
+        case 1: {
+            string name;
+            double initialBalance;
+            cin.ignore();
+
+            while (true) {
+                cout << "Enter owner name (letters only, no spaces): ";
+                getline(cin, name);
+
+                if (!isValidName(name)) {
+                    cout << "Invalid name. Use letters only with no spaces.\n";
+                    continue;
+                }
+
+                if (isNameTaken(accounts, name)) {
+                    cout << "An account with this name already exists. Try a different name.\n";
+                    continue;
+                }
+
+                break;
+            }
+
+            initialBalance = getValidAmount("Enter initial balance: ", true);
+            accounts.emplace_back(name, initialBalance);
+            cout << "Account created successfully!\n";
+            accounts.back().display();
+            break;
+        }
+
+        case 2: {
+            int accNumber;
+            cout << "Enter account number: ";
+            cin >> accNumber;
+
+            BankAccount* acc = findAccount(accounts, accNumber);
+            if (acc) {
+                double amount = getValidAmount("Enter amount to deposit: ", false);
+                acc->deposit(amount);
+            } else {
+                cout << "Account not found.\n";
+            }
+            break;
+        }
+
+        case 3: {
+            int accNumber;
+            cout << "Enter account number: ";
+            cin >> accNumber;
+
+            BankAccount* acc = findAccount(accounts, accNumber);
+            if (acc) {
+                double amount = getValidAmount("Enter amount to withdraw: ", false);
+                acc->withdraw(amount);
+            } else {
+                cout << "Account not found.\n";
+            }
+            break;
+        }
+
+        case 4: {
+            int senderNum, receiverNum;
+            cout << "Enter sender account number: ";
+            cin >> senderNum;
+            cout << "Enter receiver account number: ";
+            cin >> receiverNum;
+
+            BankAccount* sender = findAccount(accounts, senderNum);
+            BankAccount* receiver = findAccount(accounts, receiverNum);
+
+            if (!sender || !receiver) {
+                cout << "One or both accounts not found.\n";
+                break;
+            }
+
+            double amount = getValidAmount("Enter amount to transfer: ", false);
+            sender->transfer(*receiver, amount);
+            break;
+        }
+
+        case 5: {
+            int accNumber;
+            cout << "Enter account number: ";
+            cin >> accNumber;
+
+            BankAccount* acc = findAccount(accounts, accNumber);
+            if (acc) {
+                acc->display();
+            } else {
+                cout << "Account not found.\n";
+            }
+            break;
+        }
+
+        case 6:
+            cout << "Thank you for using the Online Banking System!\n";
+            break;
+
+        default:
+            cout << "Invalid choice. Try again.\n";
+        }
+
+    } while (choice != 6);
+
+    return 0;
+}
